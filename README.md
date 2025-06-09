@@ -46,7 +46,7 @@ REDIS_PORT=6379           # Redis server port number
 ### 📼 For Unix Socket connection
 
 ```env
-REDIS_UNIX_SOCKET_PATH=/tmp/docker/redis-8.0.1/redis.sock  # Full path to Redis UNIX socket file
+REDIS_UNIX_SOCKET_PATH=/path/to/redis.sock  # Full path to Redis UNIX socket file
 ```
 
 > **Note:** The library will automatically choose between TCP and Unix Socket connection based on the presence of `REDIS_HOST` and `REDIS_PORT`. If those are not set, it defaults to Unix socket.
