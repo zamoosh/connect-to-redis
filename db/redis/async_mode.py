@@ -12,19 +12,22 @@ except ImportError:
 
 import redis.asyncio as redis
 
-_REDIS_CONN_POOL: Optional[redis.Redis] = None
+_REDIS_CONN_POOLS: dict[int, Optional[redis.Redis]] = {}
 
 
-async def init_redis() -> None:
-    global _REDIS_CONN_POOL
+async def init_redis(db: int = 0) -> None:
+    global _REDIS_CONN_POOLS
 
-    if _REDIS_CONN_POOL is not None:
+    if db in _REDIS_CONN_POOLS:
         logger.info("redis is already initialized")
         return
 
+    if os.getenv("REDIS_DB") is None or db == 0:
+        logger.warning(f"REDIS_DB is not added in env, defaulting db=0")
+
     try:
         _REDIS_CONF = {
-            "db": int(os.getenv("REDIS_DB", 0)),
+            "db": db,
             "password": os.getenv("REDIS_PASS", ""),
             "max_connections": int(os.getenv("REDIS_MAX_CONNECTIONS", 50)),
             "decode_responses": True,
@@ -44,11 +47,12 @@ async def init_redis() -> None:
         logger.debug(f"REDIS ASYNC MODE - {connection_type:>{10}}")
 
         _REDIS_POOL_CNF = redis.ConnectionPool(**_REDIS_CONF)
-        _REDIS_CONN_POOL = redis.Redis(
-            unix_socket_path=os.getenv("REDIS_UNIX_SOCKET_PATH"), connection_pool=_REDIS_POOL_CNF
+        _REDIS_CONN_POOLS[db] = redis.Redis(
+            unix_socket_path=os.getenv("REDIS_UNIX_SOCKET_PATH"),
+            connection_pool=_REDIS_POOL_CNF,
         )
 
-        if not await _REDIS_CONN_POOL.ping():
+        if not await _REDIS_CONN_POOLS[db].ping():
             raise Exception("can't ping redis")
     except Exception as e:
         logger.error(e)
@@ -56,12 +60,14 @@ async def init_redis() -> None:
 
 
 async def close_redis() -> None:
-    global _REDIS_CONN_POOL
+    global _REDIS_CONN_POOLS
 
-    if _REDIS_CONN_POOL is not None:
+    if len(_REDIS_CONN_POOLS) > 0:
         try:
-            logger.info("closing redis")
-            await _REDIS_CONN_POOL.aclose()
+            for i in _REDIS_CONN_POOLS.values():
+                if i is not None:
+                    logger.info(f"closing redis '{i}'")
+                    await i.aclose()
         except Exception as e:
             logger.error(e)
             raise
@@ -76,10 +82,10 @@ async def lifespan():
     await close_redis()
 
 
-async def get_redis() -> redis.Redis:
-    global _REDIS_CONN_POOL
+async def get_redis(db: int = 0) -> redis.Redis:
+    global _REDIS_CONN_POOLS
 
-    if _REDIS_CONN_POOL is None:
-        await init_redis()
+    if db not in _REDIS_CONN_POOLS:
+        await init_redis(db)
 
-    return _REDIS_CONN_POOL
+    return _REDIS_CONN_POOLS[db]
