@@ -12,6 +12,7 @@ A simple utility library for managing **Redis connections** in both **asynchrono
 * Graceful connection closing
 * Supports TCP and Unix socket Redis connections
 * Context manager (`lifespan`) for scoped Redis usage
+* Runtime support for **multiple Redis databases**
 
 ---
 
@@ -30,7 +31,7 @@ Set these in your `.env` file or system environment depending on your connection
 ### ✨ Common
 
 ```env
-REDIS_DB=0               # Redis database index (integer)
+# REDIS_DB=0             # ❌ Deprecated — use `get_redis(db=...)` or `init_redis(db=...)` instead
 REDIS_PASS=your_password # Password for authentication
 REDIS_USERNAME=          # Optional username (used in Redis ACL setups)
 REDIS_MAX_CONNECTIONS=50 # Max number of Redis connections in the pool
@@ -53,7 +54,7 @@ REDIS_UNIX_SOCKET_PATH=/path/to/redis.sock  # Full path to Redis UNIX socket fil
 
 ---
 
-## 🗒 Usage: All code below are avaiable in "_\_practice__" module
+## 🗒 Usage: All code below are available in "_\_practice__" module
 
 ## 🚀 Async Usage
 
@@ -98,6 +99,24 @@ async def lifespan():
 asyncio.run(lifespan())
 ```
 
+### 3. Using Multiple Databases at Runtime (NEW ⚡)
+
+You can dynamically connect to different Redis databases by passing the `db` argument:
+
+```py
+from db.redis.async_mode import get_redis
+
+async def use_multiple_dbs():
+    r0 = await get_redis(db=0)
+    await r0.set("key:0", "value in db 0")
+
+    r1 = await get_redis(db=1)
+    await r1.set("key:1", "value in db 1")
+
+    print(await r0.get("key:0"))  # Output: value in db 0
+    print(await r1.get("key:1"))  # Output: value in db 1
+```
+
 ---
 
 ## 🐢 Sync Usage
@@ -129,9 +148,9 @@ if __name__ == "__main__":
 from db.redis.async_mode import init_redis, close_redis, get_redis, lifespan
 ```
 
-* `await init_redis()` – Initializes connection pool
-* `await close_redis()` – Closes the pool
-* `await get_redis()` – Returns a Redis client
+* `await init_redis(db=0)` – Initializes connection pool for given database
+* `await close_redis()` – Closes all connection pools
+* `await get_redis(db=0)` – Returns a Redis client for given database
 * `lifespan()` – Async context manager for scoped connection
 
 ### Sync Mode
@@ -140,9 +159,9 @@ from db.redis.async_mode import init_redis, close_redis, get_redis, lifespan
 from db.redis.sync_mode import init_redis, close_redis, get_redis, lifespan
 ```
 
-* `init_redis()` – Initializes connection pool
-* `close_redis()` – Closes the pool (also registered to `atexit`)
-* `get_redis()` – Returns a Redis client
+* `init_redis(db=0)` – Initializes connection pool for given database
+* `close_redis()` – Closes all connection pools (also registered to `atexit`)
+* `get_redis(db=0)` – Returns a Redis client for given database
 * `lifespan()` – Context manager for scoped connection
 
 ---
@@ -162,4 +181,3 @@ pip install loguru
 ## 📝 License
 
 MIT License — free to use and modify.
-
