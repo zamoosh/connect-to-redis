@@ -1,4 +1,5 @@
 import os
+import asyncio
 from typing import Optional
 from contextlib import asynccontextmanager
 
@@ -22,40 +23,48 @@ async def init_redis(db: int = 0) -> None:
         logger.info("redis is already initialized")
         return
 
-    if os.getenv("REDIS_DB") is None or db == 0:
+    if os.getenv("REDIS_DB") is None and db == 0:
         logger.warning(f"REDIS_DB is not added in env, defaulting db=0")
 
-    try:
-        _REDIS_CONF = {
-            "db": db,
-            "password": os.getenv("REDIS_PASS", ""),
-            "max_connections": int(os.getenv("REDIS_MAX_CONNECTIONS", 50)),
-            "decode_responses": True,
-        }
+    while True:
+        try:
+            _REDIS_CONF = {
+                "db": db,
+                "password": os.getenv("REDIS_PASS", ""),
+                "max_connections": int(os.getenv("REDIS_MAX_CONNECTIONS", 50)),
+                "decode_responses": True,
+            }
 
-        connection_type = "TCP"
-        if os.getenv("REDIS_HOST") is not None and os.getenv("REDIS_PORT") is not None:
-            _REDIS_CONF.update(
-                {
-                    "host": os.getenv("REDIS_HOST", "localhost"),
-                    "port": int(os.getenv("REDIS_PORT", "6379")),
-                }
+            connection_type = "TCP"
+            if os.getenv("REDIS_HOST") is not None and os.getenv("REDIS_PORT") is not None:
+                _REDIS_CONF.update(
+                    {
+                        "host": os.getenv("REDIS_HOST", "localhost"),
+                        "port": int(os.getenv("REDIS_PORT", "6379")),
+                    }
+                )
+            else:
+                connection_type = "UNIXSOCKET"
+
+            logger.debug(f"REDIS ASYNC MODE - {connection_type:>{10}}")
+
+            _REDIS_POOL_CNF = redis.ConnectionPool(**_REDIS_CONF)
+            _REDIS_CONN_POOLS[db] = redis.Redis(
+                unix_socket_path=os.getenv("REDIS_UNIX_SOCKET_PATH"),
+                connection_pool=_REDIS_POOL_CNF,
             )
-        else:
-            connection_type = "UNIXSOCKET"
 
-        logger.debug(f"REDIS ASYNC MODE - {connection_type:>{10}}")
+            if not await _REDIS_CONN_POOLS[db].ping():
+                raise Exception("can't ping redis")
 
-        _REDIS_POOL_CNF = redis.ConnectionPool(**_REDIS_CONF)
-        _REDIS_CONN_POOLS[db] = redis.Redis(
-            unix_socket_path=os.getenv("REDIS_UNIX_SOCKET_PATH"),
-            connection_pool=_REDIS_POOL_CNF,
-        )
-
-        if not await _REDIS_CONN_POOLS[db].ping():
-            raise Exception("can't ping redis")
-    except Exception as e:
-        logger.error(e)
+            break
+        except redis.ConnectionError:
+            logger.error("error connecting to redis, retrying in 10 secs.")
+            await asyncio.sleep(10)
+            continue
+        except Exception as e:
+            logger.error(f"unknown err: {e}")
+            break
     return
 
 
@@ -89,3 +98,4 @@ async def get_redis(db: int = 0) -> redis.Redis:
         await init_redis(db)
 
     return _REDIS_CONN_POOLS[db]
+
