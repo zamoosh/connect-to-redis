@@ -84,6 +84,55 @@ async def close_redis() -> None:
         logger.error("redis not initialized")
 
 
+async def re_connect(timeout: int = 30, sleep_time: int = 5) -> None:
+    """
+    This is a blocking function which tries to connect to redis.
+    If timeout reaches, we break, whatever we've connected or not.
+
+    :param timeout: Indicates how long to wait for to connect to redis
+    :type timeout: int
+    :param sleep_time: The slipage time we wait and for each sleep, we minus timeout and sleep
+    :type sleep_time: int
+    :return: nothing
+    :rtype: None
+    """
+
+    global _REDIS_CONN_POOLS
+
+    if len(_REDIS_CONN_POOLS) == 0:
+        logger.warning(f"redis not initialized")
+        return
+
+    if timeout > 50:
+        logger.warning(f"timeout is big, defaulting to 30")
+        timeout = 30
+
+    if sleep_time > timeout:
+        logger.warning(f"sleep time {sleep_time} > {timeout}, defaulting to 5")
+        sleep_time = 5
+
+    connected: bool = False
+    while True:
+        try:
+            if timeout <= 0:
+                break
+
+            await _REDIS_CONN_POOLS[0].ping()
+            connected = True
+            break
+        except redis.ConnectionError:
+            logger.info(f"retrying in {sleep_time} seconds")
+            await asyncio.sleep(sleep_time)
+            timeout -= sleep_time
+
+    if connected:
+        logger.success("connected")
+    else:
+        logger.warning(f"could not connect to redis")
+
+    return
+
+
 @asynccontextmanager
 async def lifespan():
     await init_redis()
@@ -98,4 +147,3 @@ async def get_redis(db: int = 0) -> redis.Redis:
         await init_redis(db)
 
     return _REDIS_CONN_POOLS[db]
-
