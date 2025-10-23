@@ -13,6 +13,7 @@ A simple utility library for managing **Redis connections** in both **asynchrono
 * Supports TCP and Unix socket Redis connections
 * Context manager (`lifespan`) for scoped Redis usage
 * Runtime support for **multiple Redis databases**
+* (NEW) Ability to reconnect with a simple blocking function which you can control how much wait
 
 ---
 
