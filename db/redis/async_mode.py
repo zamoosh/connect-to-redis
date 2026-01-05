@@ -117,7 +117,11 @@ async def re_connect(timeout: int = 30, sleep_time: int = 5) -> None:
             if timeout <= 0:
                 break
 
-            await _REDIS_CONN_POOLS[0].ping()
+            key: Optional[int | str] = None
+            for i in _REDIS_CONN_POOLS.keys():
+                key = i
+                break
+            await _REDIS_CONN_POOLS[key].ping()
             connected = True
             break
         except redis.ConnectionError:
