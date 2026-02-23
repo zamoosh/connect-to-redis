@@ -16,7 +16,7 @@ import redis
 _REDIS_CONN_POOLS: dict[int, Optional[redis.Redis]] = {}
 
 
-def init_redis(db: int = 0) -> None:
+def init_redis(db: int = 0, decode: bool = True) -> None:
     global _REDIS_CONN_POOLS
 
     if db in _REDIS_CONN_POOLS:
@@ -32,7 +32,7 @@ def init_redis(db: int = 0) -> None:
                 "db": db,
                 "password": os.getenv("REDIS_PASS", ""),
                 "max_connections": int(os.getenv("REDIS_MAX_CONNECTIONS", 50)),
-                "decode_responses": True,
+                "decode_responses": decode,
             }
 
             connection_type = "TCP"
@@ -144,11 +144,11 @@ def lifespan():
     close_redis()
 
 
-def get_redis(db: int = 0) -> redis.Redis:
+def get_redis(db: int = 0, decode: bool = True) -> redis.Redis:
     global _REDIS_CONN_POOLS
 
     if db not in _REDIS_CONN_POOLS:
-        init_redis(db)
+        init_redis(db, decode)
 
     return _REDIS_CONN_POOLS[db]
 
