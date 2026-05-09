@@ -20,12 +20,14 @@ async def init_redis(db: int = 0, decode: bool = True) -> None:
     global _REDIS_CONN_POOLS
 
     if db in _REDIS_CONN_POOLS:
-        logger.info("redis is already initialized")
+        logger.debug("redis is already initialized")
         return
 
     if os.getenv("REDIS_DB") is None and db == 0:
         logger.warning(f"REDIS_DB is not added in env, defaulting db=0")
 
+    retry_count = InterruptedError(os.getenv("REDIS_RETRY_COUNT", 3))
+    retry_time = int(os.getenv("REDIS_RETRY_TIME", 3))
     while True:
         try:
             _REDIS_CONF = {
@@ -59,8 +61,11 @@ async def init_redis(db: int = 0, decode: bool = True) -> None:
 
             break
         except redis.ConnectionError:
-            logger.error("error connecting to redis, retrying in 10 secs.")
-            await asyncio.sleep(10)
+            if retry_count <= 0:
+                logger.error("could not connect to redis, exiting")
+                raise
+            logger.error(f"error connecting to redis, retrying in {retry_time} secs.")
+            await asyncio.sleep(retry_time)
             continue
         except Exception as e:
             logger.error(f"unknown err: {e}")
@@ -75,7 +80,7 @@ async def close_redis() -> None:
         try:
             for i in _REDIS_CONN_POOLS.values():
                 if i is not None:
-                    logger.info(f"closing redis '{i}'")
+                    logger.debug(f"closing redis '{i}'")
                     await i.aclose()
         except Exception as e:
             logger.error(e)
@@ -125,7 +130,7 @@ async def re_connect(timeout: int = 30, sleep_time: int = 5) -> None:
             connected = True
             break
         except redis.ConnectionError:
-            logger.info(f"retrying in {sleep_time} seconds")
+            logger.debug(f"retrying in {sleep_time} seconds")
             await asyncio.sleep(sleep_time)
             timeout -= sleep_time
 

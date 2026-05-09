@@ -13,11 +13,12 @@ A simple utility library for managing **Redis connections** in both **asynchrono
 * Supports TCP and Unix socket Redis connections
 * Context manager (`lifespan`) for scoped Redis usage
 * Runtime support for **multiple Redis databases**
-* (NEW) Ability to reconnect with a simple blocking function which you can control how much wait
+* Ability to reconnect with a simple blocking function which you can control how much wait
+* (NEW) `Retry count` and `Retry time` can set in ENV
 
 ---
 
-## 📦 Installation
+## 📦 Dependencies
 
 ```bash
 pip install redis loguru python-dotenv
@@ -36,6 +37,8 @@ Set these in your `.env` file or system environment depending on your connection
 REDIS_PASS=your_password # Password for authentication
 REDIS_USERNAME=          # Optional username (used in Redis ACL setups)
 REDIS_MAX_CONNECTIONS=50 # Max number of Redis connections in the pool
+REDIS_RETRY_COUNT=3      # Max retry count, if hit and you're disconnected, raises
+REDIS_RETRY_TIME=3       # Numer of seconds library would wait till achieve a connection
 ```
 
 ### 🛎️ For TCP connection

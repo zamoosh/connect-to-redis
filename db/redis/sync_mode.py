@@ -20,12 +20,14 @@ def init_redis(db: int = 0, decode: bool = True) -> None:
     global _REDIS_CONN_POOLS
 
     if db in _REDIS_CONN_POOLS:
-        logger.info("redis is already initialized")
+        logger.debug("redis is already initialized")
         return
 
     if os.getenv("REDIS_DB") is None and db == 0:
         logger.warning(f"REDIS_DB is not added in env, defaulting db=0")
 
+    retry_count = int(os.getenv("REDIS_RETRY_COUNT", 3))
+    retry_time = int(os.getenv("REDIS_RETRY_TIME", 3))
     while True:
         try:
             _REDIS_CONF = {
@@ -59,8 +61,11 @@ def init_redis(db: int = 0, decode: bool = True) -> None:
 
             break
         except redis.ConnectionError:
-            logger.error("error connecting to redis, retrying in 10 secs.")
-            time.sleep(10)
+            if retry_count <= 0:
+                logger.error("could not connect to redis, exiting")
+                raise
+            logger.error(f"error connecting to redis, retrying in {retry_time} secs.")
+            time.sleep(retry_time)
             continue
         except Exception as e:
             logger.error(f"unknown err: {e}")
@@ -75,7 +80,7 @@ def close_redis() -> None:
         try:
             for i in _REDIS_CONN_POOLS.values():
                 if i is not None:
-                    logger.info(f"closing redis '{i}'")
+                    logger.debug(f"closing redis '{i}'")
                     i.close()
         except Exception as e:
             logger.error(e)
@@ -100,11 +105,11 @@ def re_connect(timeout: int = 30, sleep_time: int = 5) -> None:
     global _REDIS_CONN_POOLS
 
     if len(_REDIS_CONN_POOLS) == 0:
-        logger.warning("redis not initialized")
+        logger.warning(f"redis not initialized")
         return
 
     if timeout > 50:
-        logger.warning("timeout is big, defaulting to 30")
+        logger.warning(f"timeout is big, defaulting to 30")
         timeout = 30
 
     if sleep_time > timeout:
@@ -123,9 +128,9 @@ def re_connect(timeout: int = 30, sleep_time: int = 5) -> None:
                 break
             _REDIS_CONN_POOLS[key].ping()
             connected = True
-            break  # exit loop if successful
+            break
         except redis.ConnectionError:
-            logger.info(f"retrying in {sleep_time} seconds")
+            logger.debug(f"retrying in {sleep_time} seconds")
             time.sleep(sleep_time)
             timeout -= sleep_time
 
@@ -151,4 +156,3 @@ def get_redis(db: int = 0, decode: bool = True) -> redis.Redis:
         init_redis(db, decode)
 
     return _REDIS_CONN_POOLS[db]
-
