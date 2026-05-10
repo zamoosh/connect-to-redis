@@ -13,13 +13,15 @@ except ImportError:
 
 import redis
 
-_REDIS_CONN_POOLS: dict[int, Optional[redis.Redis]] = {}
+_REDIS_CONN_POOLS: dict[tuple[int, bool], Optional[redis.Redis]] = {}
 
 
 def init_redis(db: int = 0, decode: bool = True) -> None:
     global _REDIS_CONN_POOLS
 
-    if db in _REDIS_CONN_POOLS:
+    key = (db, decode)
+
+    if key in _REDIS_CONN_POOLS:
         logger.debug("redis is already initialized")
         return
 
@@ -51,12 +53,12 @@ def init_redis(db: int = 0, decode: bool = True) -> None:
             logger.debug(f"REDIS SYNC MODE - {connection_type:>{10}}")
 
             _REDIS_POOL_CNF = redis.ConnectionPool(**_REDIS_CONF)
-            _REDIS_CONN_POOLS[db] = redis.Redis(
+            _REDIS_CONN_POOLS[key] = redis.Redis(
                 unix_socket_path=os.getenv("REDIS_UNIX_SOCKET_PATH"),
                 connection_pool=_REDIS_POOL_CNF,
             )
 
-            if not _REDIS_CONN_POOLS[db].ping():
+            if not _REDIS_CONN_POOLS[key].ping():
                 raise Exception("can't ping redis")
 
             break
@@ -142,6 +144,21 @@ def re_connect(timeout: int = 30, sleep_time: int = 5) -> None:
     return
 
 
+def ping_redis(db: int = 0) -> None:
+    r = redis.Redis(
+        host=os.getenv("REDIS_HOST", "localhost"),
+        port=int(os.getenv("REDIS_PORT", 6379)),
+        db=db,
+        password=os.getenv("REDIS_PASS"),
+    )
+
+    if not r.ping():
+        raise Exception("can't ping redis")
+
+    logger.debug("ping redis successfull")
+    return
+
+
 @contextmanager
 def lifespan():
     init_redis()
@@ -152,7 +169,9 @@ def lifespan():
 def get_redis(db: int = 0, decode: bool = True) -> redis.Redis:
     global _REDIS_CONN_POOLS
 
-    if db not in _REDIS_CONN_POOLS:
-        init_redis(db, decode)
+    key = (db, decode)
 
-    return _REDIS_CONN_POOLS[db]
+    if key not in _REDIS_CONN_POOLS:
+        init_redis(*key)
+
+    return _REDIS_CONN_POOLS[key]
